@@ -94,39 +94,42 @@ sudo -u action-ia-aura bash -lc "ls -la $SITE"
 
 ---
 
-### PM2 e Node no usuário `action-ia-aura`
+### PM2 / npm no usuário `action-ia-aura`
 
-O PM2 de produção roda como `ia-api-aurafitpro`:
+Produção:
 
 ```text
-/home/ia-api-aurafitpro/.nvm/versions/node/v24.18.1/bin/pm2
-~/.pm2  →  /home/ia-api-aurafitpro/.pm2
-app     →  aurafit-ai-api
+Node : /home/ia-api-aurafitpro/.nvm/versions/node/v24.18.1/bin
+PM2  : /home/ia-api-aurafitpro/.pm2
+App  : aurafit-ai-api
 ```
 
-Shell não interativo **não** carrega nvm. O deploy usa o **caminho completo** do `pm2`.
+O Action **não** usa o nvm do PATH (shell não interativo).  
+`npm` e `pm2` rodam assim:
 
-Na VPS, como **root** ou **ubuntu**:
+```bash
+sudo -n -u ia-api-aurafitpro /bin/bash -c 'export PATH=...; npm|pm2 ...'
+```
+
+Na VPS, como **ubuntu/root**:
 
 ```bash
 sudo visudo -f /etc/sudoers.d/action-ia-aura-pm2
 ```
 
-Cole exatamente:
+Cole:
 
 ```text
-action-ia-aura ALL=(ia-api-aurafitpro) NOPASSWD: /home/ia-api-aurafitpro/.nvm/versions/node/v24.18.1/bin/pm2
+action-ia-aura ALL=(ia-api-aurafitpro) NOPASSWD: /bin/bash, /usr/bin/bash
 ```
 
 Teste:
 
 ```bash
-sudo -u action-ia-aura sudo -n -u ia-api-aurafitpro /home/ia-api-aurafitpro/.nvm/versions/node/v24.18.1/bin/pm2 list
+sudo -u action-ia-aura sudo -n -u ia-api-aurafitpro /bin/bash -c 'export PATH=/home/ia-api-aurafitpro/.nvm/versions/node/v24.18.1/bin:$PATH; node -v; npm -v; pm2 list'
 ```
 
-Deve listar `aurafit-ai-api` online.
-
-O `scripts/deploy.sh` usa esse binário via `sudo -n -u ia-api-aurafitpro`.
+Deve mostrar as versões e `aurafit-ai-api` online.
 
 ---
 
