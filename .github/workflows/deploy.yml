@@ -1,0 +1,137 @@
+# =============================================================================
+# AuraFit AI API — Deploy Contínuo (produção)
+# =============================================================================
+# Trigger: push em main + execução manual (workflow_dispatch)
+# Fluxo: GitHub Actions → SSH → VPS → git sync → scripts/deploy.sh → health
+#
+# Ambientes futuros (dev / homolog / prod):
+#   - Usar GitHub Environments + secrets por environment
+#   - Parametrizar APP_DIR / PM2_APP_NAME / HEALTHCHECK_URL / GIT_BRANCH
+#   - Não é necessário refazer o pipeline — só adicionar jobs/envs
+#
+# Rollback (futuro — não implementado):
+#   - Antes do reset, o SHA atual é gravado em .deploy/previous-sha
+#   - Um job separado poderá restaurar esse SHA e reiniciar o PM2
+# =============================================================================
+
+name: Deploy Production
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy to production
+    runs-on: ubuntu-latest
+    # Prepara multi-ambiente: secrets/vars podem ser escopados por Environment
+    environment: production
+    timeout-minutes: 15
+
+    env:
+      # Parametrização para reuso em outras apps / ambientes
+      APP_DIR: /home/ia-api-aurafitpro/htdocs/ia-api.aurafitpro.com.br
+      PM2_APP_NAME: aurafit-ai-api
+      HEALTHCHECK_URL: http://localhost:3000
+      GIT_BRANCH: main
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          set -euo pipefail
+
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+
+          # Chave privada (nunca imprime o conteúdo)
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+          # Host key pinning — StrictHostKeyChecking=yes (sem bypass)
+          if [ -z "${SSH_KNOWN_HOSTS:-}" ]; then
+            echo "::error::Secret SSH_KNOWN_HOSTS ausente. Gere com: ssh-keyscan -p PORT HOST"
+            exit 1
+          fi
+
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+          # Importante: sem indentação no arquivo (ssh_config é sensível a espaços)
+          {
+            echo "Host aurafit-deploy"
+            echo "  HostName ${SSH_HOST}"
+            echo "  Port ${SSH_PORT}"
+            echo "  User ${SSH_USER}"
+            echo "  IdentityFile ~/.ssh/deploy_key"
+            echo "  IdentitiesOnly yes"
+            echo "  StrictHostKeyChecking yes"
+            echo "  UserKnownHostsFile ~/.ssh/known_hosts"
+            echo "  ServerAliveInterval 30"
+            echo "  ServerAliveCountMax 3"
+          } > ~/.ssh/config
+
+          chmod 600 ~/.ssh/config
+
+      - name: Deploy over SSH
+        run: |
+          set -euo pipefail
+
+          # Sincroniza o código primeiro (garante scripts/deploy.sh atualizado),
+          # depois executa install → build → pm2 → health (sem duplicar git).
+          ssh aurafit-deploy \
+            env \
+            "APP_DIR=${APP_DIR}" \
+            "PM2_APP_NAME=${PM2_APP_NAME}" \
+            "HEALTHCHECK_URL=${HEALTHCHECK_URL}" \
+            "GIT_BRANCH=${GIT_BRANCH}" \
+            bash -s <<'REMOTE'
+          set -euo pipefail
+
+          cd "${APP_DIR}"
+
+          # Snapshot para rollback futuro (antes de alterar o working tree)
+          mkdir -p .deploy
+          PREVIOUS_SHA="$(git rev-parse HEAD 2>/dev/null || true)"
+          if [ -n "${PREVIOUS_SHA}" ]; then
+            printf '%s\n' "${PREVIOUS_SHA}" > .deploy/previous-sha
+            echo "[deploy] SHA anterior gravado: ${PREVIOUS_SHA}"
+          fi
+
+          echo "[deploy] Sincronizando origin/${GIT_BRANCH}..."
+          git fetch origin
+          git reset --hard "origin/${GIT_BRANCH}"
+
+          chmod +x scripts/deploy.sh
+          SKIP_GIT=1 ./scripts/deploy.sh
+          REMOTE
+
+      - name: Deploy summary
+        if: success()
+        run: |
+          {
+            echo "## Deploy concluído"
+            echo ""
+            echo "- **Ambiente:** production"
+            echo "- **Branch:** \`${GIT_BRANCH}\`"
+            echo "- **Commit:** \`${GITHUB_SHA}\`"
+            echo "- **App PM2:** \`${PM2_APP_NAME}\`"
+            echo "- **Path:** \`${APP_DIR}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
