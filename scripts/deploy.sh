@@ -49,6 +49,12 @@ require_cmd curl
 
 cd "$APP_DIR" || fail "Diretório do projeto não encontrado: $APP_DIR"
 
+# Repo pode ser dono de outro usuário (ex.: site CloudPanel vs action-ia-aura)
+if ! git config --global --get-all safe.directory 2>/dev/null | grep -qxF "$APP_DIR"; then
+  git config --global --add safe.directory "$APP_DIR"
+  log "safe.directory configurado: $APP_DIR"
+fi
+
 mkdir -p .deploy
 
 PREVIOUS_SHA="$(git rev-parse HEAD 2>/dev/null || true)"

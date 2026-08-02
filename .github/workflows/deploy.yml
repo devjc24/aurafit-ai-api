@@ -100,6 +100,13 @@ jobs:
 
             cd "${APP_DIR}"
 
+            # Evita "dubious ownership" quando o deploy roda como action-ia-aura
+            # e o repo pertence ao usuário do site (ia-api-aurafitpro).
+            if ! git config --global --get-all safe.directory 2>/dev/null | grep -qxF "${APP_DIR}"; then
+              git config --global --add safe.directory "${APP_DIR}"
+              echo "[deploy] safe.directory configurado: ${APP_DIR}"
+            fi
+
             mkdir -p .deploy
             PREVIOUS_SHA="$(git rev-parse HEAD 2>/dev/null || true)"
             if [ -n "${PREVIOUS_SHA}" ]; then
