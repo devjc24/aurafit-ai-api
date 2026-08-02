@@ -94,6 +94,42 @@ sudo -u action-ia-aura bash -lc "ls -la $SITE"
 
 ---
 
+### PM2 e Node no usuário `action-ia-aura`
+
+O PM2 de produção roda como `ia-api-aurafitpro`:
+
+```text
+/home/ia-api-aurafitpro/.nvm/versions/node/v24.18.1/bin/pm2
+~/.pm2  →  /home/ia-api-aurafitpro/.pm2
+app     →  aurafit-ai-api
+```
+
+Shell não interativo **não** carrega nvm. O deploy usa o **caminho completo** do `pm2`.
+
+Na VPS, como **root** ou **ubuntu**:
+
+```bash
+sudo visudo -f /etc/sudoers.d/action-ia-aura-pm2
+```
+
+Cole exatamente:
+
+```text
+action-ia-aura ALL=(ia-api-aurafitpro) NOPASSWD: /home/ia-api-aurafitpro/.nvm/versions/node/v24.18.1/bin/pm2
+```
+
+Teste:
+
+```bash
+sudo -u action-ia-aura sudo -n -u ia-api-aurafitpro /home/ia-api-aurafitpro/.nvm/versions/node/v24.18.1/bin/pm2 list
+```
+
+Deve listar `aurafit-ai-api` online.
+
+O `scripts/deploy.sh` usa esse binário via `sudo -n -u ia-api-aurafitpro`.
+
+---
+
 ## 6. Como testar o deploy
 
 1. Secrets no Environment **`produção`**
