@@ -7,7 +7,9 @@
 #   CLOUDPANEL_HOST, CLOUDPANEL_PORT, CLOUDPANEL_USER, CLOUDPANEL_PASSWORD
 #   CLOUDPANEL_BACKEND_PATH (opcional), BACKEND_HEALTH_URL (opcional)
 #
-# Rollback (futuro): .deploy/previous-sha é gravado antes do reset
+# Nota: o script do appleboy/ssh-action NÃO deve usar case/esac nem
+# continuações com "\" — o action junta linhas com ";" e quebra a sintaxe.
+# A lógica complexa fica em scripts/deploy.sh.
 # =============================================================================
 
 name: Deploy Production
@@ -37,6 +39,7 @@ jobs:
       PM2_APP_NAME: aurafit-ai-api
       HEALTHCHECK_URL: ${{ secrets.BACKEND_HEALTH_URL || 'http://localhost:3000' }}
       GIT_BRANCH: main
+      GIT_HTTPS_ORIGIN: https://github.com/devjc24/aurafit-ai-api.git
 
     steps:
       - name: Checkout repository
@@ -76,7 +79,7 @@ jobs:
           command_timeout: 30s
           script: |
             set -euo pipefail
-            echo "SSH_OK"
+            echo SSH_OK
             whoami
             pwd
 
@@ -87,6 +90,7 @@ jobs:
           PM2_APP_NAME: ${{ env.PM2_APP_NAME }}
           HEALTHCHECK_URL: ${{ env.HEALTHCHECK_URL }}
           GIT_BRANCH: ${{ env.GIT_BRANCH }}
+          GIT_HTTPS_ORIGIN: ${{ env.GIT_HTTPS_ORIGIN }}
         with:
           host: ${{ secrets.CLOUDPANEL_HOST }}
           username: ${{ secrets.CLOUDPANEL_USER }}
@@ -94,56 +98,24 @@ jobs:
           port: ${{ secrets.CLOUDPANEL_PORT }}
           script_stop: true
           command_timeout: 20m
-          envs: APP_DIR,PM2_APP_NAME,HEALTHCHECK_URL,GIT_BRANCH
+          envs: APP_DIR,PM2_APP_NAME,HEALTHCHECK_URL,GIT_BRANCH,GIT_HTTPS_ORIGIN
+          # Comandos em linhas simples (appleboy junta com ";")
           script: |
             set -euo pipefail
-
             cd "${APP_DIR}"
-
-            # Evita "dubious ownership" quando o deploy roda como action-ia-aura
-            # e o repo pertence ao usuário do site (ia-api-aurafitpro).
-            if ! git config --global --get-all safe.directory 2>/dev/null | grep -qxF "${APP_DIR}"; then
-              git config --global --add safe.directory "${APP_DIR}"
-              echo "[deploy] safe.directory configurado: ${APP_DIR}"
-            fi
-
-            # known_hosts do GitHub (evita Host key verification failed no git fetch)
+            git config --global --add safe.directory "${APP_DIR}" || true
             mkdir -p ~/.ssh
             chmod 700 ~/.ssh
             touch ~/.ssh/known_hosts
             chmod 600 ~/.ssh/known_hosts
-            if ! grep -qE '(^github\.com |,github\.com )' ~/.ssh/known_hosts 2>/dev/null; then
-              printf '%s\n' \
-                'github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl' \
-                'github.com ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBEmKSENjQEezOmxkZMy7opKgwFB9nkt5YRrYMjNuG5N87uRgg6CLrbo5wAdT/y6v0mKV0U2w0WZ2YB/++Tpockg=' \
-                'github.com ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCj7ndNxQowgcQnjshcLrqPEiiphnt+VTTvDP6mHBL9j1aNUkY4Ue1gvwnGLVlOhGeYrnZaMgRK6+PKCUXaDbC7qtbW8gIkhL7aGCsOr/C56SJMy/BCZfxd1nWzAOxSDPgVsmerOBYfNqltV9/hWCqBywINIR+5dIg6JTJ72pcEpEjcYgXkE2YEFXV1JHnsKgbLWNlhScqb2UmyRkQyytRLtL+38TGxkxCflmO+5Z8CSSNY7GidjMIZ7Q4zMjA2n1nGrlTDkzwDCsw+wqFPGQA179cnfGWOWRVruj16z6XyvxvjJwbz0wQZ75XK5tKSb7FNyeIEs4TT4jk+S4dhPeAUC5y+bDYirYgM4GC7uEnztnZyaVWQ7B381AK4Qdrwt51ZqExKbQpTUNn+EjqoTwvqNj4kqx5QUCI0ThS/YkOxJCXmPUWZbhjpCg56i+2aB6CmK2JGhn57K5mj0MNdBXA4/WnwH6XoPWJzK5Nyu2zB3nAZp+S5hpQs+p1vN1/wsjk=' \
-                >> ~/.ssh/known_hosts
-              echo "[deploy] GitHub adicionado ao known_hosts"
-            fi
-
+            ssh-keyscan -t ed25519,ecdsa,rsa github.com >> ~/.ssh/known_hosts 2>/dev/null || true
             mkdir -p .deploy
-            PREVIOUS_SHA="$(git rev-parse HEAD 2>/dev/null || true)"
-            if [ -n "${PREVIOUS_SHA}" ]; then
-              printf '%s\n' "${PREVIOUS_SHA}" > .deploy/previous-sha
-              echo "[deploy] SHA anterior gravado: ${PREVIOUS_SHA}"
-            fi
-
-            echo "[deploy] Remote: $(git remote get-url origin 2>/dev/null || echo n/a)"
-            # Preferir HTTPS — action-ia-aura não tem deploy key SSH do GitHub
-            ORIGIN_URL="$(git remote get-url origin 2>/dev/null || true)"
-            case "${ORIGIN_URL}" in
-              git@github.com:*)
-                REPO_PATH="${ORIGIN_URL#git@github.com:}"
-                REPO_PATH="${REPO_PATH%.git}"
-                git remote set-url origin "https://github.com/${REPO_PATH}.git"
-                echo "[deploy] Remote convertido para HTTPS"
-                ;;
-            esac
-
+            git rev-parse HEAD > .deploy/previous-sha 2>/dev/null || true
+            git remote set-url origin "${GIT_HTTPS_ORIGIN}"
+            echo "[deploy] Remote: $(git remote get-url origin)"
             echo "[deploy] Sincronizando origin/${GIT_BRANCH}..."
             git fetch origin
             git reset --hard "origin/${GIT_BRANCH}"
-
             chmod +x scripts/deploy.sh
             SKIP_GIT=1 ./scripts/deploy.sh
 
