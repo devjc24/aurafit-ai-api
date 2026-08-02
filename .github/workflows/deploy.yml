@@ -2,16 +2,12 @@
 # AuraFit AI API — Deploy Contínuo (produção)
 # =============================================================================
 # Trigger: push em main + execução manual (workflow_dispatch)
-# Fluxo: GitHub Actions → SSH → VPS → git sync → scripts/deploy.sh → health
+# Auth: SSH com usuário/senha (padrão CloudPanel da empresa)
+# Secrets (Environment "produção"):
+#   CLOUDPANEL_HOST, CLOUDPANEL_PORT, CLOUDPANEL_USER, CLOUDPANEL_PASSWORD
+#   CLOUDPANEL_BACKEND_PATH (opcional), BACKEND_HEALTH_URL (opcional)
 #
-# Ambientes futuros (dev / homolog / prod):
-#   - Usar GitHub Environments + secrets por environment
-#   - Parametrizar APP_DIR / PM2_APP_NAME / HEALTHCHECK_URL / GIT_BRANCH
-#   - Não é necessário refazer o pipeline — só adicionar jobs/envs
-#
-# Rollback (futuro — não implementado):
-#   - Antes do reset, o SHA atual é gravado em .deploy/previous-sha
-#   - Um job separado poderá restaurar esse SHA e reiniciar o PM2
+# Rollback (futuro): .deploy/previous-sha é gravado antes do reset
 # =============================================================================
 
 name: Deploy Production
@@ -23,7 +19,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: deploy-production
+  group: deploy-producao
   cancel-in-progress: false
 
 permissions:
@@ -31,134 +27,92 @@ permissions:
 
 jobs:
   deploy:
-    name: Deploy to production
+    name: Implantar em produção
     runs-on: ubuntu-latest
-    # Prepara multi-ambiente: secrets/vars podem ser escopados por Environment
-    environment: production
+    environment: produção
     timeout-minutes: 15
 
     env:
-      # Parametrização para reuso em outras apps / ambientes
-      APP_DIR: /home/ia-api-aurafitpro/htdocs/ia-api.aurafitpro.com.br
+      APP_DIR: ${{ secrets.CLOUDPANEL_BACKEND_PATH || '/home/ia-api-aurafitpro/htdocs/ia-api.aurafitpro.com.br' }}
       PM2_APP_NAME: aurafit-ai-api
-      HEALTHCHECK_URL: http://localhost:3000
+      HEALTHCHECK_URL: ${{ secrets.BACKEND_HEALTH_URL || 'http://localhost:3000' }}
       GIT_BRANCH: main
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Validate SSH secrets
+      - name: Validate CloudPanel secrets
         env:
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_PORT: ${{ secrets.SSH_PORT }}
-          SSH_USER: ${{ secrets.SSH_USER }}
+          CLOUDPANEL_HOST: ${{ secrets.CLOUDPANEL_HOST }}
+          CLOUDPANEL_PORT: ${{ secrets.CLOUDPANEL_PORT }}
+          CLOUDPANEL_USER: ${{ secrets.CLOUDPANEL_USER }}
+          CLOUDPANEL_PASSWORD: ${{ secrets.CLOUDPANEL_PASSWORD }}
         run: |
           set -euo pipefail
-
           missing=0
-          for name in SSH_PRIVATE_KEY SSH_KNOWN_HOSTS SSH_HOST SSH_PORT SSH_USER; do
-            # Lê via indireção sem imprimir o valor
+          for name in CLOUDPANEL_HOST CLOUDPANEL_PORT CLOUDPANEL_USER CLOUDPANEL_PASSWORD; do
             value="${!name}"
             if [ -z "${value}" ]; then
-              echo "::error::Secret/variável ausente ou vazia: ${name}"
-              echo "Se o job usa environment 'production', cadastre o secret no Environment OU no repositório."
+              echo "::error::Secret ausente no Environment 'produção': ${name}"
               missing=1
             else
-              echo "OK: ${name} está definido (tamanho=${#value})"
+              echo "OK: ${name} definido (tamanho=${#value})"
             fi
           done
           [ "$missing" -eq 0 ] || exit 1
+          echo "Usuário SSH: ${CLOUDPANEL_USER}"
+          echo "Host: ${CLOUDPANEL_HOST}:${CLOUDPANEL_PORT}"
+          echo "APP_DIR: ${APP_DIR}"
 
-      - name: Setup SSH agent
-        uses: webfactory/ssh-agent@v0.9.0
+      - name: Test SSH connection (password)
+        uses: appleboy/ssh-action@v1.2.0
         with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
-
-      - name: Configure known_hosts and SSH defaults
-        env:
-          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_PORT: ${{ secrets.SSH_PORT }}
-          SSH_USER: ${{ secrets.SSH_USER }}
-        run: |
-          set -euo pipefail
-
-          mkdir -p ~/.ssh
-          chmod 700 ~/.ssh
-
-          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
-          chmod 644 ~/.ssh/known_hosts
-
-          # Defaults seguros (sem StrictHostKeyChecking=no)
-          {
-            echo "Host aurafit-deploy"
-            echo "  HostName ${SSH_HOST}"
-            echo "  Port ${SSH_PORT}"
-            echo "  User ${SSH_USER}"
-            echo "  IdentitiesOnly yes"
-            echo "  PreferredAuthentications publickey"
-            echo "  PasswordAuthentication no"
-            echo "  StrictHostKeyChecking yes"
-            echo "  UserKnownHostsFile ~/.ssh/known_hosts"
-            echo "  ServerAliveInterval 30"
-            echo "  ServerAliveCountMax 3"
-          } > ~/.ssh/config
-          chmod 600 ~/.ssh/config
-
-          echo "SSH target: ${SSH_USER}@${SSH_HOST}:${SSH_PORT}"
-          echo "Fingerprint(s) carregada(s) no agent:"
-          ssh-add -l
-
-      - name: Test SSH connection
-        run: |
-          set -euo pipefail
-
-          if ! ssh -o BatchMode=yes -o ConnectTimeout=15 aurafit-deploy "echo SSH_OK && whoami && pwd"; then
-            echo "::error::Falha de autenticação SSH (publickey)."
-            echo "Checklist:"
-            echo "  1) SSH_USER deve ser o usuário do site no CloudPanel (ex.: ia-api-aurafitpro), não root (salvo se a chave estiver no root)."
-            echo "  2) A chave PÚBLICA (.pub) deve estar em ~/.ssh/authorized_keys DESSE usuário na VPS."
-            echo "  3) SSH_PRIVATE_KEY no GitHub deve ser a chave PRIVADA completa (BEGIN/END), sem aspas."
-            echo "  4) Teste local: ssh -i ./sua-chave -p PORT USER@HOST"
-            echo "  5) Secrets do Environment 'production' precisam existir (se o environment estiver em uso)."
-            exit 1
-          fi
+          host: ${{ secrets.CLOUDPANEL_HOST }}
+          username: ${{ secrets.CLOUDPANEL_USER }}
+          password: ${{ secrets.CLOUDPANEL_PASSWORD }}
+          port: ${{ secrets.CLOUDPANEL_PORT }}
+          script_stop: true
+          command_timeout: 30s
+          script: |
+            set -euo pipefail
+            echo "SSH_OK"
+            whoami
+            pwd
 
       - name: Deploy over SSH
-        run: |
-          set -euo pipefail
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          APP_DIR: ${{ env.APP_DIR }}
+          PM2_APP_NAME: ${{ env.PM2_APP_NAME }}
+          HEALTHCHECK_URL: ${{ env.HEALTHCHECK_URL }}
+          GIT_BRANCH: ${{ env.GIT_BRANCH }}
+        with:
+          host: ${{ secrets.CLOUDPANEL_HOST }}
+          username: ${{ secrets.CLOUDPANEL_USER }}
+          password: ${{ secrets.CLOUDPANEL_PASSWORD }}
+          port: ${{ secrets.CLOUDPANEL_PORT }}
+          script_stop: true
+          command_timeout: 20m
+          envs: APP_DIR,PM2_APP_NAME,HEALTHCHECK_URL,GIT_BRANCH
+          script: |
+            set -euo pipefail
 
-          # Sincroniza o código primeiro (garante scripts/deploy.sh atualizado),
-          # depois executa install → build → pm2 → health (sem duplicar git).
-          ssh aurafit-deploy \
-            env \
-            "APP_DIR=${APP_DIR}" \
-            "PM2_APP_NAME=${PM2_APP_NAME}" \
-            "HEALTHCHECK_URL=${HEALTHCHECK_URL}" \
-            "GIT_BRANCH=${GIT_BRANCH}" \
-            bash -s <<'REMOTE'
-          set -euo pipefail
+            cd "${APP_DIR}"
 
-          cd "${APP_DIR}"
+            mkdir -p .deploy
+            PREVIOUS_SHA="$(git rev-parse HEAD 2>/dev/null || true)"
+            if [ -n "${PREVIOUS_SHA}" ]; then
+              printf '%s\n' "${PREVIOUS_SHA}" > .deploy/previous-sha
+              echo "[deploy] SHA anterior gravado: ${PREVIOUS_SHA}"
+            fi
 
-          # Snapshot para rollback futuro (antes de alterar o working tree)
-          mkdir -p .deploy
-          PREVIOUS_SHA="$(git rev-parse HEAD 2>/dev/null || true)"
-          if [ -n "${PREVIOUS_SHA}" ]; then
-            printf '%s\n' "${PREVIOUS_SHA}" > .deploy/previous-sha
-            echo "[deploy] SHA anterior gravado: ${PREVIOUS_SHA}"
-          fi
+            echo "[deploy] Sincronizando origin/${GIT_BRANCH}..."
+            git fetch origin
+            git reset --hard "origin/${GIT_BRANCH}"
 
-          echo "[deploy] Sincronizando origin/${GIT_BRANCH}..."
-          git fetch origin
-          git reset --hard "origin/${GIT_BRANCH}"
-
-          chmod +x scripts/deploy.sh
-          SKIP_GIT=1 ./scripts/deploy.sh
-          REMOTE
+            chmod +x scripts/deploy.sh
+            SKIP_GIT=1 ./scripts/deploy.sh
 
       - name: Deploy summary
         if: success()
@@ -166,9 +120,10 @@ jobs:
           {
             echo "## Deploy concluído"
             echo ""
-            echo "- **Ambiente:** production"
+            echo "- **Ambiente:** produção"
             echo "- **Branch:** \`${GIT_BRANCH}\`"
             echo "- **Commit:** \`${GITHUB_SHA}\`"
             echo "- **App PM2:** \`${PM2_APP_NAME}\`"
             echo "- **Path:** \`${APP_DIR}\`"
+            echo "- **Auth:** SSH usuário/senha (CLOUDPANEL_*)"
           } >> "$GITHUB_STEP_SUMMARY"
