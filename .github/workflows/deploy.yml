@@ -48,9 +48,37 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Configure SSH
+      - name: Validate SSH secrets
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          set -euo pipefail
+
+          missing=0
+          for name in SSH_PRIVATE_KEY SSH_KNOWN_HOSTS SSH_HOST SSH_PORT SSH_USER; do
+            # Lê via indireção sem imprimir o valor
+            value="${!name}"
+            if [ -z "${value}" ]; then
+              echo "::error::Secret/variável ausente ou vazia: ${name}"
+              echo "Se o job usa environment 'production', cadastre o secret no Environment OU no repositório."
+              missing=1
+            else
+              echo "OK: ${name} está definido (tamanho=${#value})"
+            fi
+          done
+          [ "$missing" -eq 0 ] || exit 1
+
+      - name: Setup SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Configure known_hosts and SSH defaults
+        env:
           SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_PORT: ${{ secrets.SSH_PORT }}
@@ -61,34 +89,43 @@ jobs:
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
 
-          # Chave privada (nunca imprime o conteúdo)
-          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-
-          # Host key pinning — StrictHostKeyChecking=yes (sem bypass)
-          if [ -z "${SSH_KNOWN_HOSTS:-}" ]; then
-            echo "::error::Secret SSH_KNOWN_HOSTS ausente. Gere com: ssh-keyscan -p PORT HOST"
-            exit 1
-          fi
-
           printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 644 ~/.ssh/known_hosts
 
-          # Importante: sem indentação no arquivo (ssh_config é sensível a espaços)
+          # Defaults seguros (sem StrictHostKeyChecking=no)
           {
             echo "Host aurafit-deploy"
             echo "  HostName ${SSH_HOST}"
             echo "  Port ${SSH_PORT}"
             echo "  User ${SSH_USER}"
-            echo "  IdentityFile ~/.ssh/deploy_key"
             echo "  IdentitiesOnly yes"
+            echo "  PreferredAuthentications publickey"
+            echo "  PasswordAuthentication no"
             echo "  StrictHostKeyChecking yes"
             echo "  UserKnownHostsFile ~/.ssh/known_hosts"
             echo "  ServerAliveInterval 30"
             echo "  ServerAliveCountMax 3"
           } > ~/.ssh/config
-
           chmod 600 ~/.ssh/config
+
+          echo "SSH target: ${SSH_USER}@${SSH_HOST}:${SSH_PORT}"
+          echo "Fingerprint(s) carregada(s) no agent:"
+          ssh-add -l
+
+      - name: Test SSH connection
+        run: |
+          set -euo pipefail
+
+          if ! ssh -o BatchMode=yes -o ConnectTimeout=15 aurafit-deploy "echo SSH_OK && whoami && pwd"; then
+            echo "::error::Falha de autenticação SSH (publickey)."
+            echo "Checklist:"
+            echo "  1) SSH_USER deve ser o usuário do site no CloudPanel (ex.: ia-api-aurafitpro), não root (salvo se a chave estiver no root)."
+            echo "  2) A chave PÚBLICA (.pub) deve estar em ~/.ssh/authorized_keys DESSE usuário na VPS."
+            echo "  3) SSH_PRIVATE_KEY no GitHub deve ser a chave PRIVADA completa (BEGIN/END), sem aspas."
+            echo "  4) Teste local: ssh -i ./sua-chave -p PORT USER@HOST"
+            echo "  5) Secrets do Environment 'production' precisam existir (se o environment estiver em uso)."
+            exit 1
+          fi
 
       - name: Deploy over SSH
         run: |

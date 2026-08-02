@@ -88,26 +88,40 @@ Arquivos gerados:
 
 ## 5. Como cadastrar a chave pública na VPS
 
-Conecte na VPS com um usuário que já tenha acesso e execute (ajuste o usuário do site):
+No CloudPanel, o usuário SSH costuma ser o **usuário do site** (ex.: `ia-api-aurafitpro`), **não** `root`, a menos que a chave tenha sido instalada no root de propósito.
+
+Conecte na VPS com um usuário que já tenha acesso e execute **como o mesmo usuário do secret `SSH_USER`**:
 
 ```bash
-# Exemplo CloudPanel — usuário do site ia-api
+# Exemplo CloudPanel — usuário do site
+whoami
+# deve bater com SSH_USER no GitHub
+
 mkdir -p ~/.ssh
 chmod 700 ~/.ssh
-nano ~/.ssh/authorized_keys
-```
 
-Cole o conteúdo de `aurafit-ai-api-deploy.pub` em uma nova linha.
+# Adiciona a chave pública (uma linha)
+cat >> ~/.ssh/authorized_keys <<'EOF'
+COLE_AQUI_O_CONTEUDO_DE_aurafit-ai-api-deploy.pub
+EOF
 
-```bash
 chmod 600 ~/.ssh/authorized_keys
+chmod 700 ~/.ssh
 ```
 
-Teste do seu PC:
+Permissões do home também importam (SSH recusa se `~` estiver aberto demais):
 
 ```bash
-ssh -i ./aurafit-ai-api-deploy -p 22 USUARIO@HOST
+chmod 755 ~
 ```
+
+Teste **do seu PC** (obrigatório antes de rodar a Action):
+
+```bash
+ssh -i ./aurafit-ai-api-deploy -p 22 USUARIO@HOST "echo OK && whoami"
+```
+
+Se isso falhar localmente, a Action também vai falhar.
 
 Garanta que esse usuário consegue:
 
@@ -115,6 +129,17 @@ Garanta que esse usuário consegue:
 - `git fetch` / `git reset`
 - `npm install` / `npm run build`
 - `pm2` (restart/start/save)
+
+### Troubleshooting: `Permission denied (publickey,password)`
+
+| Causa | Como corrigir |
+|-------|----------------|
+| `SSH_USER` errado | Use o usuário do site CloudPanel (ex.: `ia-api-aurafitpro`) |
+| `.pub` no usuário errado | A pública deve estar em `/home/<SSH_USER>/.ssh/authorized_keys` |
+| Privada incompleta no GitHub | Cole a privada inteira (`BEGIN` … `END`), sem aspas |
+| Secret no lugar errado | Com `environment: production`, confira secrets do **Environment** e do repositório |
+| Chave pública ≠ privada | `ssh-keygen -y -f ./aurafit-ai-api-deploy` deve bater com a linha no `authorized_keys` |
+| Teste local falha | Corrija na VPS primeiro; só depois rode a Action |
 
 ---
 
