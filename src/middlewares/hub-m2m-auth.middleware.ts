@@ -1,7 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 import { env } from "../config/env";
 import { AURA_AI_HEADERS } from "../types/contract/headers";
-import { UnauthorizedError } from "../types/errors";
+import { AppError, UnauthorizedError } from "../types/errors";
 import { logger } from "../utils/logger";
 import { safeEqualSecret } from "./request-context.middleware";
 
@@ -17,6 +17,20 @@ export function hubM2mAuthMiddleware(
   if (!env.m2mAuthRequired) {
     req.hubAuthenticated = true;
     next();
+    return;
+  }
+
+  if (!env.auraHubM2mApiKey) {
+    logger.error("M2M configurado sem AURA_HUB_M2M_API_KEY", {
+      requestId: req.requestId,
+    });
+    next(
+      new AppError(
+        "Aura IA sem AURA_HUB_M2M_API_KEY configurada",
+        503,
+        "INTERNAL_ERROR"
+      )
+    );
     return;
   }
 

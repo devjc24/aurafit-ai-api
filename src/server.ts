@@ -52,5 +52,12 @@ app.listen(env.port, () => {
     model: env.model,
     service: env.serviceName,
     m2mAuthRequired: env.m2mAuthRequired,
+    m2mKeyConfigured: Boolean(env.auraHubM2mApiKey),
   });
+
+  if (env.m2mAuthRequired && !env.auraHubM2mApiKey) {
+    logger.warn(
+      "AURA_HUB_M2M_API_KEY ausente — /api/v1/ai responderá 503 até configurar"
+    );
+  }
 });

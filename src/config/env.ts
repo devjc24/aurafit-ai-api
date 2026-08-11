@@ -14,8 +14,12 @@ export interface AppEnv {
   corsOrigins: string[] | "*";
   logLevel: LogLevel;
   maxPromptLength: number;
-  /** Segredo M2M AuraHub → Aura IA (nunca expor a produtos). */
-  auraHubM2mApiKey: string;
+  /**
+   * Segredo M2M AuraHub → Aura IA.
+   * Opcional no boot (para não derrubar deploy/health).
+   * Rotas /api/v1/ai exigem key quando m2mAuthRequired=true.
+   */
+  auraHubM2mApiKey: string | null;
   m2mAuthRequired: boolean;
   hubRateLimitWindowMs: number;
   hubRateLimitMax: number;
@@ -82,26 +86,32 @@ function parseBool(raw: string | undefined, fallback: boolean): boolean {
   throw new Error(`Booleano inválido: ${raw}`);
 }
 
-function loadHubM2mApiKey(nodeEnv: string): string {
+/**
+ * Não derruba o processo se a key M2M estiver ausente.
+ * Health/PM2 continuam funcionando; rotas M2M respondem 503 até configurar.
+ */
+function loadHubM2mApiKey(nodeEnv: string): string | null {
   const raw = process.env.AURA_HUB_M2M_API_KEY?.trim();
-  if (raw) {
-    if (raw.length < 16) {
-      throw new Error("AURA_HUB_M2M_API_KEY deve ter ao menos 16 caracteres");
+  if (!raw) {
+    if (nodeEnv === "test") {
+      return "test-aura-hub-m2m-key";
     }
-    return raw;
+    return null;
   }
-  if (nodeEnv === "test") {
-    return "test-aura-hub-m2m-key";
+  if (raw.length < 16) {
+    throw new Error("AURA_HUB_M2M_API_KEY deve ter ao menos 16 caracteres");
   }
-  if (nodeEnv === "production") {
-    throw new Error("Variável de ambiente obrigatória ausente: AURA_HUB_M2M_API_KEY");
-  }
-  // development: exige key se M2M estiver ligado (default true)
-  return requireEnv("AURA_HUB_M2M_API_KEY");
+  return raw;
 }
 
 function loadEnv(): AppEnv {
   const nodeEnv = process.env.NODE_ENV?.trim() || "development";
+  const auraHubM2mApiKey = loadHubM2mApiKey(nodeEnv);
+  const m2mAuthRequired = parseBool(
+    process.env.M2M_AUTH_REQUIRED,
+    nodeEnv !== "test"
+  );
+
   return {
     nodeEnv,
     port: parsePort(process.env.PORT),
@@ -120,11 +130,8 @@ function loadEnv(): AppEnv {
       16_000,
       "MAX_PROMPT_LENGTH"
     ),
-    auraHubM2mApiKey: loadHubM2mApiKey(nodeEnv),
-    m2mAuthRequired: parseBool(
-      process.env.M2M_AUTH_REQUIRED,
-      nodeEnv !== "test"
-    ),
+    auraHubM2mApiKey,
+    m2mAuthRequired,
     hubRateLimitWindowMs: parsePositiveInt(
       process.env.HUB_RATE_LIMIT_WINDOW_MS,
       60_000,
