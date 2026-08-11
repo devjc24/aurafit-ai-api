@@ -14,6 +14,11 @@ export interface AppEnv {
   corsOrigins: string[] | "*";
   logLevel: LogLevel;
   maxPromptLength: number;
+  /** Segredo M2M AuraHub → Aura IA (nunca expor a produtos). */
+  auraHubM2mApiKey: string;
+  m2mAuthRequired: boolean;
+  hubRateLimitWindowMs: number;
+  hubRateLimitMax: number;
 }
 
 function requireEnv(name: string): string {
@@ -67,9 +72,38 @@ function parseCorsOrigins(raw: string | undefined): string[] | "*" {
     .filter(Boolean);
 }
 
+function parseBool(raw: string | undefined, fallback: boolean): boolean {
+  if (raw === undefined || raw.trim() === "") {
+    return fallback;
+  }
+  const value = raw.trim().toLowerCase();
+  if (value === "true" || value === "1") return true;
+  if (value === "false" || value === "0") return false;
+  throw new Error(`Booleano inválido: ${raw}`);
+}
+
+function loadHubM2mApiKey(nodeEnv: string): string {
+  const raw = process.env.AURA_HUB_M2M_API_KEY?.trim();
+  if (raw) {
+    if (raw.length < 16) {
+      throw new Error("AURA_HUB_M2M_API_KEY deve ter ao menos 16 caracteres");
+    }
+    return raw;
+  }
+  if (nodeEnv === "test") {
+    return "test-aura-hub-m2m-key";
+  }
+  if (nodeEnv === "production") {
+    throw new Error("Variável de ambiente obrigatória ausente: AURA_HUB_M2M_API_KEY");
+  }
+  // development: exige key se M2M estiver ligado (default true)
+  return requireEnv("AURA_HUB_M2M_API_KEY");
+}
+
 function loadEnv(): AppEnv {
+  const nodeEnv = process.env.NODE_ENV?.trim() || "development";
   return {
-    nodeEnv: process.env.NODE_ENV?.trim() || "development",
+    nodeEnv,
     port: parsePort(process.env.PORT),
     serviceName: process.env.SERVICE_NAME?.trim() || "Aura IA",
     ollamaUrl: requireEnv("OLLAMA_URL").replace(/\/$/, ""),
@@ -85,6 +119,21 @@ function loadEnv(): AppEnv {
       process.env.MAX_PROMPT_LENGTH,
       16_000,
       "MAX_PROMPT_LENGTH"
+    ),
+    auraHubM2mApiKey: loadHubM2mApiKey(nodeEnv),
+    m2mAuthRequired: parseBool(
+      process.env.M2M_AUTH_REQUIRED,
+      nodeEnv !== "test"
+    ),
+    hubRateLimitWindowMs: parsePositiveInt(
+      process.env.HUB_RATE_LIMIT_WINDOW_MS,
+      60_000,
+      "HUB_RATE_LIMIT_WINDOW_MS"
+    ),
+    hubRateLimitMax: parsePositiveInt(
+      process.env.HUB_RATE_LIMIT_MAX,
+      120,
+      "HUB_RATE_LIMIT_MAX"
     ),
   };
 }

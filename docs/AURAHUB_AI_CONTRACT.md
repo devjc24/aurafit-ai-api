@@ -1,11 +1,12 @@
 # Contrato Técnico — AuraHub ↔ Aura IA
 
-**Status:** Proposto (não implementado em produção)  
+**Status:** Implementado (hop M2M Hub ↔ Aura IA)  
 **Data:** 2026-08-10  
 **Versão do contrato:** `1.0.0`  
 **Base path Aura IA:** `/api/v1/ai`  
-**Escopo:** definir o contrato M2M para o AuraHub consumir a Aura IA.  
-**Fora de escopo deste documento:** alteração de código no AuraHub, RAG, tools, agents, providers externos.
+**Escopo:** contrato M2M para o AuraHub consumir a Aura IA.  
+**Facade Hub:** `POST /api/v1/ai/chat`, `GET /api/v1/ai/specialists`  
+**Fora de escopo:** RAG, tools, agents, providers externos, duplicação de licença/identidade.
 
 ---
 

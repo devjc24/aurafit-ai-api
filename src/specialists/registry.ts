@@ -51,7 +51,10 @@ export class SpecialistRegistry {
   get(id: string): ISpecialist {
     const specialist = this.byId.get(id);
     if (!specialist) {
-      throw new NotFoundError(`Especialista não encontrado: ${id}`);
+      throw new NotFoundError(
+        `Especialista não encontrado: ${id}`,
+        "SPECIALIST_NOT_FOUND"
+      );
     }
     return specialist;
   }
@@ -66,7 +69,10 @@ export class SpecialistRegistry {
 
   getCapability(capabilityId: string): CapabilityDefinition {
     if (!isCapabilityId(capabilityId)) {
-      throw new NotFoundError(`Capability não encontrada: ${capabilityId}`);
+      throw new NotFoundError(
+        `Capability não encontrada: ${capabilityId}`,
+        "CAPABILITY_NOT_FOUND"
+      );
     }
     return CAPABILITY_CATALOG[capabilityId];
   }
@@ -109,7 +115,10 @@ export class SpecialistRegistry {
     // Ambos informados: specialist deve existir e suportar a capability
     const specialist = this.get(specialistId!);
     if (!isCapabilityId(capabilityId!)) {
-      throw new NotFoundError(`Capability não encontrada: ${capabilityId}`);
+      throw new NotFoundError(
+        `Capability não encontrada: ${capabilityId}`,
+        "CAPABILITY_NOT_FOUND"
+      );
     }
 
     if (!specialist.supports(capabilityId as CapabilityId)) {

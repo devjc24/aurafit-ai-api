@@ -1,6 +1,6 @@
 import axios, { AxiosError, AxiosInstance } from "axios";
 import { env } from "../../config/env";
-import { ProviderError } from "../../types/errors";
+import { ProviderError, ProviderTimeoutError } from "../../types/errors";
 import { logger } from "../../utils/logger";
 import type {
   ILlmProvider,
@@ -84,7 +84,7 @@ export class OllamaProvider implements ILlmProvider {
       });
 
       if (axiosError.code === "ECONNABORTED") {
-        throw new ProviderError("Timeout ao consultar Ollama", details);
+        throw new ProviderTimeoutError("Timeout ao consultar Ollama", details);
       }
 
       throw new ProviderError("Erro ao consultar Ollama", details);

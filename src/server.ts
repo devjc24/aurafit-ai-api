@@ -6,6 +6,7 @@ import {
   errorHandler,
   notFoundHandler,
 } from "./middlewares/error.middleware";
+import { requestContextMiddleware } from "./middlewares/request-context.middleware";
 import { bootstrapSpecialistRegistry } from "./specialists";
 import aiRoutes from "./routes/ai.routes";
 import aiV1Routes from "./routes/v1/ai.routes";
@@ -18,6 +19,7 @@ const app = express();
 app.use(corsMiddleware);
 app.use(helmet());
 app.use(express.json({ limit: "1mb" }));
+app.use(requestContextMiddleware);
 
 app.get("/", (_req, res) => {
   res.json({
@@ -34,10 +36,10 @@ app.get("/health", (_req, res) => {
   });
 });
 
-// Compatibilidade (legado)
+// Compatibilidade (legado) — não é o caminho de produção Plataforma
 app.use("/api/ai", aiRoutes);
 
-// Contrato preparado para plataforma / AuraHub
+// Contrato versionado AuraHub → Aura IA
 app.use("/api/v1/ai", aiV1Routes);
 
 app.use(notFoundHandler);
@@ -49,5 +51,6 @@ app.listen(env.port, () => {
     ollamaUrl: env.ollamaUrl,
     model: env.model,
     service: env.serviceName,
+    m2mAuthRequired: env.m2mAuthRequired,
   });
 });
