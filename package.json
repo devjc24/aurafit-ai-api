@@ -1,7 +1,7 @@
 {
   "name": "ia-api.aurafitpro.com.br",
   "version": "1.0.0",
-  "description": "API de IA AuraFit integrada ao Ollama",
+  "description": "Aura IA — serviço de inteligência da Plataforma Aura (Ollama)",
   "main": "dist/server.js",
   "type": "commonjs",
   "scripts": {
@@ -14,7 +14,8 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^5.1.0",
-    "helmet": "^8.0.0"
+    "helmet": "^8.0.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",

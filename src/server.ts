@@ -1,40 +1,50 @@
-import dotenv from "dotenv";
-
-dotenv.config();
-
 import express from "express";
-import cors from "cors";
 import helmet from "helmet";
-
+import { env } from "./config/env";
+import { corsMiddleware } from "./middlewares/cors.middleware";
+import {
+  errorHandler,
+  notFoundHandler,
+} from "./middlewares/error.middleware";
 import aiRoutes from "./routes/ai.routes";
-
+import aiV1Routes from "./routes/v1/ai.routes";
+import { logger } from "./utils/logger";
 
 const app = express();
 
-
-app.use(cors());
+app.use(corsMiddleware);
 app.use(helmet());
-app.use(express.json());
+app.use(express.json({ limit: "1mb" }));
 
-
-app.get("/",(_,res)=>{
-    res.json({
-        status:"online",
-        service:"AuraFit AI API"
-    });
+app.get("/", (_req, res) => {
+  res.json({
+    status: "online",
+    service: env.serviceName,
+    version: "1.0.0",
+  });
 });
 
+app.get("/health", (_req, res) => {
+  res.json({
+    status: "ok",
+    service: env.serviceName,
+  });
+});
 
+// Compatibilidade (legado)
 app.use("/api/ai", aiRoutes);
 
+// Contrato preparado para plataforma / AuraHub
+app.use("/api/v1/ai", aiV1Routes);
 
-app.listen(process.env.PORT,()=>{
+app.use(notFoundHandler);
+app.use(errorHandler);
 
-    console.log("OLLAMA:", process.env.OLLAMA_URL);
-    console.log("MODEL:", process.env.MODEL);
-
-    console.log(
-        `API rodando na porta ${process.env.PORT}`
-    );
-
+app.listen(env.port, () => {
+  logger.info("API iniciada", {
+    port: env.port,
+    ollamaUrl: env.ollamaUrl,
+    model: env.model,
+    service: env.serviceName,
+  });
 });
