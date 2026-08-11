@@ -7,7 +7,7 @@ const router = Router();
 
 /**
  * Compatibilidade: POST /api/ai/chat
- * Mantido para não quebrar clientes existentes.
+ * Body: { prompt, specialist?, capability?, context? }
  */
 router.post("/chat", validateBody(chatRequestSchema), chatLegacy);
 

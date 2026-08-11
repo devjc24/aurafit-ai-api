@@ -1,21 +1,20 @@
-import { buildGeneralSystemPrompt } from "../prompts/specialists/general.prompt";
+import { buildLinuxSystemPrompt } from "../prompts/specialists/linux.prompt";
 import type { CapabilityId } from "../types/capability.types";
 import type { SpecialistConfig } from "../types/specialist.types";
 import { BaseSpecialist } from "./base.specialist";
 
-export class GeneralSpecialist extends BaseSpecialist {
-  readonly id = "general";
-  readonly name = "Geral";
-  readonly description = "Assistente geral da Aura IA";
+export class LinuxSpecialist extends BaseSpecialist {
+  readonly id = "linux";
+  readonly name = "Linux";
+  readonly description = "Especialista em administração e troubleshooting Linux";
   readonly version = "1.0.0";
   readonly capabilities: readonly CapabilityId[] = [];
   readonly config: SpecialistConfig = {
     allowExecution: false,
-    temperature: 0.4,
-    notes: "Fallback quando specialist/capability não são informados",
+    temperature: 0.3,
   };
 
   buildSystemPrompt(capability?: CapabilityId): string {
-    return buildGeneralSystemPrompt(capability);
+    return buildLinuxSystemPrompt(capability);
   }
 }

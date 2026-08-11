@@ -6,9 +6,12 @@ import {
   errorHandler,
   notFoundHandler,
 } from "./middlewares/error.middleware";
+import { bootstrapSpecialistRegistry } from "./specialists";
 import aiRoutes from "./routes/ai.routes";
 import aiV1Routes from "./routes/v1/ai.routes";
 import { logger } from "./utils/logger";
+
+bootstrapSpecialistRegistry();
 
 const app = express();
 

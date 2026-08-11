@@ -1,21 +1,20 @@
-import { buildGeneralSystemPrompt } from "../prompts/specialists/general.prompt";
+import { buildDockerSystemPrompt } from "../prompts/specialists/docker.prompt";
 import type { CapabilityId } from "../types/capability.types";
 import type { SpecialistConfig } from "../types/specialist.types";
 import { BaseSpecialist } from "./base.specialist";
 
-export class GeneralSpecialist extends BaseSpecialist {
-  readonly id = "general";
-  readonly name = "Geral";
-  readonly description = "Assistente geral da Aura IA";
+export class DockerSpecialist extends BaseSpecialist {
+  readonly id = "docker";
+  readonly name = "Docker";
+  readonly description = "Especialista em Docker e Compose";
   readonly version = "1.0.0";
   readonly capabilities: readonly CapabilityId[] = [];
   readonly config: SpecialistConfig = {
     allowExecution: false,
-    temperature: 0.4,
-    notes: "Fallback quando specialist/capability não são informados",
+    temperature: 0.3,
   };
 
   buildSystemPrompt(capability?: CapabilityId): string {
-    return buildGeneralSystemPrompt(capability);
+    return buildDockerSystemPrompt(capability);
   }
 }

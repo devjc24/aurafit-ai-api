@@ -1,25 +1,20 @@
 import type { ILlmProvider } from "../providers/llm/llm.provider";
+import { bootstrapSpecialistRegistry } from "../specialists";
 import type { ChatRequest, ChatResult } from "../types/chat.types";
-import { SpecialistService } from "./specialist.service";
+import { AuraAiService } from "./aura-ai.service";
 
+/**
+ * Compatibilidade: chat genérico delega para AuraAiService.
+ */
 export class ChatService {
-  private readonly specialistService: SpecialistService;
+  private readonly auraAi: AuraAiService;
 
   constructor(provider: ILlmProvider) {
-    this.specialistService = new SpecialistService(provider);
+    bootstrapSpecialistRegistry();
+    this.auraAi = new AuraAiService(provider);
   }
 
   async chat(input: ChatRequest): Promise<ChatResult> {
-    const result = await this.specialistService.run(
-      input.prompt,
-      input.specialist ?? "general"
-    );
-
-    return {
-      response: result.generation.text,
-      specialist: result.specialistId,
-      model: result.generation.model,
-      provider: result.generation.provider,
-    };
+    return this.auraAi.process(input);
   }
 }
