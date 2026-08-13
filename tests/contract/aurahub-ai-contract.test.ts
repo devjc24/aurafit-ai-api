@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  AURA_AI_ERROR_CODES,
   AURA_AI_HEADERS,
   aiRequestSchema,
   buildAIErrorResponse,
@@ -38,14 +39,13 @@ describe("AuraHub AI contract DTOs", () => {
     expect(result.success).toBe(false);
   });
 
-  it("monta AIResponse no envelope do Hub", () => {
+  it("monta AIResponse no envelope do Hub sem exigir provider/model", () => {
     const response = buildAISuccessResponse(
       {
         requestId: "req-1",
         response: "ok",
-        specialist: "general",
-        provider: "ollama",
-        model: "internal-model",
+        specialist: "sql",
+        capability: "sql.generate",
         durationMs: 10,
       },
       { correlationId: "cor-1" }
@@ -53,11 +53,13 @@ describe("AuraHub AI contract DTOs", () => {
 
     expect(response.success).toBe(true);
     expect(response.data?.response).toBe("ok");
+    expect(response.data?.specialist).toBe("sql");
+    expect(response.data?.capability).toBe("sql.generate");
     expect(response.meta.requestId).toBe("req-1");
     expect(response.errors).toEqual([]);
   });
 
-  it("monta AIResponse de erro", () => {
+  it("monta AIResponse de erro com códigos oficiais", () => {
     const response = buildAIErrorResponse({
       requestId: "req-2",
       message: "Falha",
@@ -76,5 +78,18 @@ describe("AuraHub AI contract DTOs", () => {
     expect(AURA_AI_HEADERS.correlationId).toBe("x-correlation-id");
     expect(AURA_AI_HEADERS.tenantId).toBe("x-tenant-id");
     expect(AURA_AI_HEADERS.system).toBe("x-aura-system");
+  });
+
+  it("expõe códigos de erro oficiais do contrato v1", () => {
+    expect([...AURA_AI_ERROR_CODES]).toEqual([
+      "AUTHENTICATION_ERROR",
+      "AUTHORIZATION_ERROR",
+      "VALIDATION_ERROR",
+      "RATE_LIMITED",
+      "PROVIDER_TIMEOUT",
+      "PROVIDER_ERROR",
+      "AI_ERROR",
+      "INTERNAL_ERROR",
+    ]);
   });
 });

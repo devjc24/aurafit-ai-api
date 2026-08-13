@@ -4,6 +4,13 @@ export {
 } from "./headers";
 
 export {
+  AURA_AI_ERROR_CODES,
+  AURA_AI_EXTENDED_ERROR_CODES,
+  type AuraAiErrorCode,
+  type AuraAiExtendedErrorCode,
+} from "./error-codes";
+
+export {
   aiTenantSchema,
   aiUserContextSchema,
   aiRequestContextSchema,

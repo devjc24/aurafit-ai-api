@@ -38,4 +38,4 @@ Produtos **nunca** recebem `AURA_IA_API_KEY`.
 
 ## Contrato detalhado
 
-Ver [AURAHUB_AI_CONTRACT.md](./AURAHUB_AI_CONTRACT.md).
+Ver [AURA_AI_API_CONTRACT.md](./AURA_AI_API_CONTRACT.md) (contrato oficial v1).

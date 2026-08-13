@@ -1,8 +1,8 @@
 export type ErrorCode =
   | "BAD_REQUEST"
   | "VALIDATION_ERROR"
-  | "UNAUTHORIZED"
-  | "FORBIDDEN"
+  | "AUTHENTICATION_ERROR"
+  | "AUTHORIZATION_ERROR"
   | "NOT_FOUND"
   | "SPECIALIST_NOT_FOUND"
   | "CAPABILITY_NOT_FOUND"
@@ -10,7 +10,7 @@ export type ErrorCode =
   | "RATE_LIMITED"
   | "PROVIDER_ERROR"
   | "PROVIDER_TIMEOUT"
-  | "MODEL_ERROR"
+  | "AI_ERROR"
   | "INTERNAL_ERROR";
 
 export class AppError extends Error {
@@ -46,14 +46,14 @@ export class ValidationError extends AppError {
 
 export class UnauthorizedError extends AppError {
   constructor(message = "Não autenticado") {
-    super(message, 401, "UNAUTHORIZED");
+    super(message, 401, "AUTHENTICATION_ERROR");
     this.name = "UnauthorizedError";
   }
 }
 
 export class ForbiddenError extends AppError {
   constructor(message = "Não autorizado") {
-    super(message, 403, "FORBIDDEN");
+    super(message, 403, "AUTHORIZATION_ERROR");
     this.name = "ForbiddenError";
   }
 }
@@ -72,9 +72,18 @@ export class ProviderTimeoutError extends AppError {
   }
 }
 
-export class ModelError extends AppError {
+/** Falha de processamento AI não atribuível ao provider (ex.: specialist). */
+export class AiError extends AppError {
   constructor(message: string, details?: unknown) {
-    super(message, 502, "MODEL_ERROR", details);
+    super(message, 502, "AI_ERROR", details);
+    this.name = "AiError";
+  }
+}
+
+/** @deprecated Preferir AiError — mantido como alias. */
+export class ModelError extends AiError {
+  constructor(message: string, details?: unknown) {
+    super(message, details);
     this.name = "ModelError";
   }
 }

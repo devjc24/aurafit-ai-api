@@ -2,6 +2,7 @@ import { z } from "zod";
 
 /**
  * Item de erro alinhado ao envelope AuraHub.
+ * Códigos oficiais: docs/AURA_AI_API_CONTRACT.md
  */
 export const aiErrorItemSchema = z.object({
   code: z.string().min(1),
@@ -16,7 +17,10 @@ export const aiUsageSchema = z.object({
 });
 
 /**
- * Payload de negócio (`data`) do contrato Hub ↔ Aura IA.
+ * Payload de negócio (`data`) do hop Hub → Aura IA.
+ *
+ * Campos públicos do contrato: requestId, response, specialist, capability.
+ * provider/model são opcionais (auditoria Hub); produtos não devem depender deles.
  */
 export const aiResultSchema = z.object({
   requestId: z.string().min(1),
@@ -24,9 +28,10 @@ export const aiResultSchema = z.object({
   specialist: z.string().min(1),
   specialistVersion: z.string().optional(),
   capability: z.string().optional(),
-  provider: z.string().min(1),
-  /** Modelo efetivo — informativo/auditoria; nunca escolhido pelo produto. */
-  model: z.string().min(1),
+  /** Somente auditoria no hop Hub↔IA — não é API pública de produtos. */
+  provider: z.string().min(1).optional(),
+  /** Modelo efetivo — interno; nunca escolhido pelo consumidor. */
+  model: z.string().min(1).optional(),
   usage: aiUsageSchema.optional(),
   durationMs: z.number().int().nonnegative(),
   error: z.null().optional(),
