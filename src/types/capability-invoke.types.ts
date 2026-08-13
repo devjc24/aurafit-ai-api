@@ -1,13 +1,13 @@
 import { z } from "zod";
 import { env } from "../config/env";
-import type { CapabilityId } from "./capability.types";
+import type { CapabilityId } from "../capabilities";
 import type { SpecialistRequestContext } from "./specialist.types";
 
 /**
- * Body legado / transitório.
- * .strict() rejeita model/provider — modelo é decisão interna.
+ * Body das rotas de capability (/sql/*, /code/*).
+ * .strict() rejeita `model` / `provider` — decisão interna da Aura IA.
  */
-export const chatRequestSchema = z
+export const capabilityInvokeSchema = z
   .object({
     prompt: z
       .string({ error: "Prompt obrigatório" })
@@ -17,8 +17,8 @@ export const chatRequestSchema = z
         env.maxPromptLength,
         `Prompt excede o limite de ${env.maxPromptLength} caracteres`
       ),
+    /** Override opcional do specialist (ex.: code.generate com typescript). */
     specialist: z.string().trim().min(1).optional(),
-    capability: z.string().trim().min(1).optional(),
     context: z
       .object({
         schema: z.string().trim().min(1).optional(),
@@ -28,27 +28,14 @@ export const chatRequestSchema = z
   })
   .strict();
 
-export type ChatRequest = {
-  prompt: string;
-  specialist?: string;
-  capability?: string;
-  context?: SpecialistRequestContext;
-};
+export type CapabilityInvokeRequest = z.infer<typeof capabilityInvokeSchema>;
 
-export interface ChatResult {
+export interface CapabilityInvokeResult {
   response: string;
   specialist: string;
   specialistVersion: string;
-  capability?: CapabilityId;
+  capability: CapabilityId;
   provider: string;
 }
 
-export interface LegacyChatResponse {
-  success: true;
-  response: string;
-}
-
-export interface V1ChatResponse {
-  success: true;
-  data: ChatResult;
-}
+export type { SpecialistRequestContext };

@@ -45,14 +45,16 @@ app.use("/api/v1/ai", aiV1Routes);
 app.use(notFoundHandler);
 app.use(errorHandler);
 
-app.listen(env.port, () => {
+app.listen(env.port, "0.0.0.0", () => {
   logger.info("API iniciada", {
     port: env.port,
+    bind: "0.0.0.0",
     ollamaUrl: env.ollamaUrl,
     model: env.model,
     service: env.serviceName,
     m2mAuthRequired: env.m2mAuthRequired,
     m2mKeyConfigured: Boolean(env.auraHubM2mApiKey),
+    cwd: process.cwd(),
   });
 
   if (env.m2mAuthRequired && !env.auraHubM2mApiKey) {

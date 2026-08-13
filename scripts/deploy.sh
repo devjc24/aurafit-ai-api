@@ -148,17 +148,34 @@ run_as_owner "${NODE_BIN}" "${NODE_BIN}/npm" run build
 
 # --- PM2 (como APP_OWNER) ----------------------------------------------------
 log "PM2 restart/start (${PM2_APP_NAME})..."
+if [[ ! -f "${APP_DIR}/.env" ]]; then
+  fail "Arquivo .env não encontrado em ${APP_DIR}/.env (obrigatório: PORT, OLLAMA_URL, MODEL)"
+fi
+
 if run_as_owner "${NODE_BIN}" "${NODE_BIN}/pm2" describe "${PM2_APP_NAME}" >/dev/null 2>&1; then
-  run_as_owner "${NODE_BIN}" "${NODE_BIN}/pm2" restart "${PM2_APP_NAME}"
+  # --update-env: recarrega env do processo; --cwd garante dotenv/workdir corretos
+  run_as_owner "${NODE_BIN}" "${NODE_BIN}/pm2" restart "${PM2_APP_NAME}" --update-env
 else
-  log "Processo não encontrado. Criando..."
-  run_as_owner "${NODE_BIN}" "${NODE_BIN}/pm2" start "${APP_DIR}/dist/server.js" --name "${PM2_APP_NAME}"
+  log "Processo não encontrado. Criando com cwd=${APP_DIR}..."
+  run_as_owner "${NODE_BIN}" "${NODE_BIN}/pm2" start "${APP_DIR}/dist/server.js" \
+    --name "${PM2_APP_NAME}" \
+    --cwd "${APP_DIR}"
 fi
 run_as_owner "${NODE_BIN}" "${NODE_BIN}/pm2" save
 
 # --- Health check ------------------------------------------------------------
-log "Aguardando API..."
+log "Aguardando API em ${HEALTHCHECK_URL}..."
 sleep 5
+
+# Se o processo já está em crash loop, falha cedo com logs
+pm2_status="$(run_as_owner "${NODE_BIN}" "${NODE_BIN}/pm2" jlist 2>/dev/null || echo '[]')"
+if echo "${pm2_status}" | grep -q "\"name\":\"${PM2_APP_NAME}\""; then
+  restarts="$(echo "${pm2_status}" | sed -n "s/.*\"name\":\"${PM2_APP_NAME}\"[^]]*\"restart_time\":\([0-9]*\).*/\1/p" | head -n1 || true)"
+  if [[ -n "${restarts}" && "${restarts}" -ge 5 ]]; then
+    log "PM2 indica muitos restarts (${restarts}). Dumpando logs..."
+    run_as_owner "${NODE_BIN}" "${NODE_BIN}/pm2" logs "${PM2_APP_NAME}" --lines 80 --nostream || true
+  fi
+fi
 
 attempt=1
 http_code=""
@@ -175,7 +192,12 @@ while (( attempt <= HEALTHCHECK_RETRIES )); do
   ((attempt++))
 done
 
-[[ "${http_code}" == "200" ]] || fail "Health check falhou (último HTTP: ${http_code:-n/a})"
+if [[ "${http_code}" != "200" ]]; then
+  log "Health check falhou. Diagnóstico PM2:"
+  run_as_owner "${NODE_BIN}" "${NODE_BIN}/pm2" describe "${PM2_APP_NAME}" || true
+  run_as_owner "${NODE_BIN}" "${NODE_BIN}/pm2" logs "${PM2_APP_NAME}" --lines 100 --nostream || true
+  fail "Health check falhou (último HTTP: ${http_code:-n/a}). Veja logs PM2 acima (provável .env/PORT/OLLAMA_URL/MODEL)."
+fi
 
 {
   printf 'deployed_at=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"

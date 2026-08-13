@@ -1,6 +1,11 @@
 import type { ILlmProvider } from "../providers/llm/llm.provider";
+import type { CapabilityId } from "../capabilities";
 import type { SpecialistRegistry } from "../specialists/registry";
 import { getSpecialistRegistry } from "../specialists/registry";
+import type {
+  CapabilityInvokeRequest,
+  CapabilityInvokeResult,
+} from "../types/capability-invoke.types";
 import type { ChatRequest, ChatResult } from "../types/chat.types";
 import type { AIRequest } from "../types/contract/ai-request";
 import type { AIResult } from "../types/contract/ai-response";
@@ -10,7 +15,8 @@ import { SpecialistService } from "./specialist.service";
 
 /**
  * Fachada da Aura IA.
- * Consumidores (via Hub) escolhem specialist/capability — nunca o modelo LLM.
+ * Fluxo: Service → Specialist → Provider → Ollama
+ * Consumidores escolhem specialist/capability — nunca o modelo físico.
  */
 export class AuraAiService {
   private readonly specialistService: SpecialistService;
@@ -42,8 +48,40 @@ export class AuraAiService {
   }
 
   /**
-   * Processamento no contrato Hub ↔ Aura IA.
+   * Invoca capability fixa (rotas /sql/*, /code/*).
    */
+  async processCapability(
+    capabilityId: CapabilityId,
+    input: CapabilityInvokeRequest
+  ): Promise<CapabilityInvokeResult> {
+    const result = await this.specialistService.run({
+      prompt: input.prompt,
+      specialistId: input.specialist,
+      capabilityId,
+      requestContext: input.context,
+    });
+
+    if (!result.capability) {
+      throw new Error(`Capability não resolvida: ${capabilityId}`);
+    }
+
+    logger.info("Capability request completed", {
+      capability: result.capability,
+      specialist: result.specialistId,
+      provider: result.generation.provider,
+      model: result.generation.model || env.model,
+      status: "success",
+    });
+
+    return {
+      response: result.generation.text,
+      specialist: result.specialistId,
+      specialistVersion: result.specialistVersion,
+      capability: result.capability,
+      provider: result.generation.provider,
+    };
+  }
+
   async processHubRequest(input: AIRequest): Promise<AIResult> {
     const started = Date.now();
 

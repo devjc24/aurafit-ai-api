@@ -1,9 +1,9 @@
 import {
-  CAPABILITY_CATALOG,
+  getCapabilityRegistry,
   isCapabilityId,
   type CapabilityDefinition,
   type CapabilityId,
-} from "../types/capability.types";
+} from "../capabilities";
 import { AppError, NotFoundError, ValidationError } from "../types/errors";
 import type {
   ISpecialist,
@@ -17,6 +17,7 @@ export interface ResolveSpecialistInput {
 
 export class SpecialistRegistry {
   private readonly byId = new Map<string, ISpecialist>();
+  private readonly capabilities = getCapabilityRegistry();
 
   register(specialist: ISpecialist): void {
     if (this.byId.has(specialist.id)) {
@@ -64,17 +65,11 @@ export class SpecialistRegistry {
   }
 
   listCapabilities(): CapabilityDefinition[] {
-    return Object.values(CAPABILITY_CATALOG);
+    return this.capabilities.list();
   }
 
   getCapability(capabilityId: string): CapabilityDefinition {
-    if (!isCapabilityId(capabilityId)) {
-      throw new NotFoundError(
-        `Capability não encontrada: ${capabilityId}`,
-        "CAPABILITY_NOT_FOUND"
-      );
-    }
-    return CAPABILITY_CATALOG[capabilityId];
+    return this.capabilities.get(capabilityId);
   }
 
   resolveByCapability(capabilityId: string): SpecialistResolution {
@@ -112,7 +107,6 @@ export class SpecialistRegistry {
       return { specialist: this.get(specialistId) };
     }
 
-    // Ambos informados: specialist deve existir e suportar a capability
     const specialist = this.get(specialistId!);
     if (!isCapabilityId(capabilityId!)) {
       throw new NotFoundError(
@@ -123,7 +117,7 @@ export class SpecialistRegistry {
 
     if (!specialist.supports(capabilityId as CapabilityId)) {
       throw new ValidationError(
-        `Especialista ${specialist.id} não suporta a capability ${capabilityId}`
+        `Especialista "${specialist.id}" nao possui a capability "${capabilityId}"`
       );
     }
 

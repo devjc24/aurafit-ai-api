@@ -1,8 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
 import { env } from "../config/env";
-import { getOllamaProvider } from "../providers/llm";
-import { bootstrapSpecialistRegistry } from "../specialists";
-import { AuraAiService } from "../services/aura-ai.service";
+import { getAuraAiService } from "../services/aura-ai.factory";
 import type { ChatRequest } from "../types/chat.types";
 import type { AIRequest } from "../types/contract/ai-request";
 import { buildAISuccessResponse } from "../types/contract/ai-response";
@@ -12,8 +10,7 @@ import {
 } from "../types/errors";
 import { logger } from "../utils/logger";
 
-bootstrapSpecialistRegistry();
-const auraAi = new AuraAiService(getOllamaProvider());
+const auraAi = getAuraAiService();
 
 function getChatBody(req: Request): ChatRequest {
   return req.body as ChatRequest;

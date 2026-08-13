@@ -1,6 +1,30 @@
+import path from "node:path";
+import fs from "node:fs";
 import dotenv from "dotenv";
 
-dotenv.config();
+/**
+ * Carrega .env relativo ao projeto (não depende do cwd do PM2).
+ * dist/config/env.js → ../../.env
+ * src/config/env.ts  → ../../.env (via ts-node)
+ */
+function loadDotenv(): void {
+  const candidates = [
+    path.resolve(__dirname, "..", "..", ".env"), // dist/config → raiz
+    path.resolve(__dirname, "..", ".env"), // fallback
+    path.resolve(process.cwd(), ".env"),
+  ];
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      dotenv.config({ path: candidate });
+      return;
+    }
+  }
+
+  dotenv.config();
+}
+
+loadDotenv();
 
 export type LogLevel = "debug" | "info" | "warn" | "error";
 
@@ -28,7 +52,10 @@ export interface AppEnv {
 function requireEnv(name: string): string {
   const value = process.env[name]?.trim();
   if (!value) {
-    throw new Error(`Variável de ambiente obrigatória ausente: ${name}`);
+    throw new Error(
+      `Variável de ambiente obrigatória ausente: ${name}. ` +
+        `Confirme o arquivo .env na raiz do projeto (OLLAMA_URL, MODEL, PORT).`
+    );
   }
   return value;
 }
@@ -66,8 +93,15 @@ function parseLogLevel(raw: string | undefined): LogLevel {
   return value;
 }
 
-function parseCorsOrigins(raw: string | undefined): string[] | "*" {
-  if (!raw || raw.trim() === "" || raw.trim() === "*") {
+function parseCorsOrigins(
+  raw: string | undefined,
+  nodeEnv: string
+): string[] | "*" {
+  if (!raw || raw.trim() === "") {
+    // Produção: exige lista explícita (mais seguro). Dev/test: * por conveniência.
+    return nodeEnv === "production" ? [] : "*";
+  }
+  if (raw.trim() === "*") {
     return "*";
   }
   return raw
@@ -123,7 +157,7 @@ function loadEnv(): AppEnv {
       60_000,
       "OLLAMA_TIMEOUT_MS"
     ),
-    corsOrigins: parseCorsOrigins(process.env.CORS_ORIGINS),
+    corsOrigins: parseCorsOrigins(process.env.CORS_ORIGINS, nodeEnv),
     logLevel: parseLogLevel(process.env.LOG_LEVEL),
     maxPromptLength: parsePositiveInt(
       process.env.MAX_PROMPT_LENGTH,
